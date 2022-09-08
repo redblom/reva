@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -96,33 +97,62 @@ type authorizer struct {
 	conf                *config
 }
 
+func normalizeDomain(d string) (string, error) {
+	var urlString string
+	if strings.Contains(d, "://") {
+		urlString = d
+	} else {
+		urlString = "https://" + d
+	}
+
+	u, err := url.Parse(urlString)
+	if err != nil {
+		return "", err
+	}
+
+	return u.Hostname(), nil
+}
+
 func (a *authorizer) fetchProviders() ([]*ocmprovider.ProviderInfo, error) {
 	if (a.providers != nil) && (time.Now().Unix() < a.providersExpiration) {
 		return a.providers, nil
 	}
 
-	req, err := http.NewRequest("GET", a.client.BaseURL, nil)
+	// req, err := http.NewRequest("GET", a.client.BaseURL, nil)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// req.Header.Set("Accept", "application/json; charset=utf-8")
+	// req.Header.Set("Content-Type", "application/json; charset=utf-8")
+
+	// res, err := a.client.HTTPClient.Do(req)
+	// if err != nil {
+	// 	err = errors.Wrap(err,
+	// 		fmt.Sprintf("mentix: error fetching provider list from: %s", a.client.BaseURL))
+	// 	return nil, err
+	// }
+
+	// defer res.Body.Close()
+
+	// providers := make([]*ocmprovider.ProviderInfo, 0)
+	// if err = json.NewDecoder(res.Body).Decode(&providers); err != nil {
+	// 	return nil, err
+	// }
+
+	// for testing load providers from file instead
+	f, err := ioutil.ReadFile("/go/src/github/cs3org/reva/examples/rclone-two-server-setup/ocm-test-providers.json")
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/json; charset=utf-8")
-	req.Header.Set("Content-Type", "application/json; charset=utf-8")
-
-	res, err := a.client.HTTPClient.Do(req)
+	providers := []*ocmprovider.ProviderInfo{}
+	err = json.Unmarshal(f, &providers)
 	if err != nil {
-		err = errors.Wrap(err,
-			fmt.Sprintf("error fetching provider list from: %s", a.client.BaseURL))
-		return nil, err
-	}
-
-	defer res.Body.Close()
-
-	providers := make([]*ocmprovider.ProviderInfo, 0)
-	if err = json.NewDecoder(res.Body).Decode(&providers); err != nil {
 		return nil, err
 	}
 
 	a.providers = a.getOCMProviders(providers)
+	fmt.Printf("a.providers: %v\n", a.providers)
+
 	if a.conf.RefreshInterval > 0 {
 		a.providersExpiration = time.Now().Unix() + a.conf.RefreshInterval
 	}
@@ -130,29 +160,42 @@ func (a *authorizer) fetchProviders() ([]*ocmprovider.ProviderInfo, error) {
 }
 
 func (a *authorizer) GetInfoByDomain(ctx context.Context, domain string) (*ocmprovider.ProviderInfo, error) {
-	providers, err := a.fetchProviders()
+	fmt.Printf("GetInfoByDomain: %v\n", domain)
+	normalizedDomain, err := normalizeDomain(domain)
 	if err != nil {
 		return nil, err
 	}
 
+	providers, err := a.fetchProviders()
+	if err != nil {
+		return nil, err
+	}
 	for _, p := range providers {
-		if strings.Contains(p.Domain, domain) {
+		if strings.Contains(p.Domain, normalizedDomain) {
 			return p, nil
 		}
 	}
 	return nil, errtypes.NotFound(domain)
 }
 
-func (a *authorizer) IsProviderAllowed(ctx context.Context, provider *ocmprovider.ProviderInfo) error {
+func (a *authorizer) IsProviderAllowed(ctx context.Context, pi *ocmprovider.ProviderInfo) error {
+	fmt.Println("mentix IsProviderAllowed")
 	providers, err := a.fetchProviders()
 	if err != nil {
 		return err
 	}
 
+	normalizedDomain, err := normalizeDomain(pi.Domain)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("normalized domain: %v\n", normalizedDomain)
+
 	var providerAuthorized bool
-	if provider.Domain != "" {
+	if normalizedDomain != "" {
 		for _, p := range providers {
-			if p.Domain == provider.Domain {
+			fmt.Printf("authorize provider: Checking %v against %v\n", p.Domain, normalizedDomain)
+			if p.Domain == normalizedDomain {
 				providerAuthorized = true
 				break
 			}
@@ -163,24 +206,28 @@ func (a *authorizer) IsProviderAllowed(ctx context.Context, provider *ocmprovide
 
 	switch {
 	case !providerAuthorized:
-		return errtypes.NotFound(provider.GetDomain())
+		return errtypes.NotFound(pi.GetDomain())
 	case !a.conf.VerifyRequestHostname:
 		return nil
-	case len(provider.Services) == 0:
-		return errtypes.NotSupported("No IP provided")
+	case len(pi.Services) == 0:
+		return errtypes.NotSupported(
+			fmt.Sprintf("mentix: provider %s has no supported services", pi.GetDomain()))
 	}
 
 	var ocmHost string
 	for _, p := range providers {
-		if p.Domain == provider.Domain {
+		fmt.Printf("get OCM host: Checking %v against %v\n", p.Domain, normalizedDomain)
+		if p.Domain == normalizedDomain {
 			ocmHost, err = a.getOCMHost(p)
 			if err != nil {
 				return err
 			}
+			break
 		}
 	}
 	if ocmHost == "" {
-		return errtypes.InternalError("mentix: ocm host not specified for mesh provider")
+		return errtypes.NotSupported(
+			fmt.Sprintf("mentix: provider %s is missing OCM endpoint", pi.GetDomain()))
 	}
 
 	providerAuthorized = false
@@ -190,7 +237,8 @@ func (a *authorizer) IsProviderAllowed(ctx context.Context, provider *ocmprovide
 	} else {
 		addr, err := net.LookupIP(ocmHost)
 		if err != nil {
-			return errors.Wrap(err, "json: error looking up client IP")
+			return errors.Wrap(err,
+				fmt.Sprintf("mentix: error looking up IPs for OCM endpoint %s", ocmHost))
 		}
 		for _, a := range addr {
 			ipList = append(ipList, a.String())
@@ -199,12 +247,16 @@ func (a *authorizer) IsProviderAllowed(ctx context.Context, provider *ocmprovide
 	}
 
 	for _, ip := range ipList {
-		if ip == provider.Services[0].Host {
+		if ip == pi.Services[0].Host {
 			providerAuthorized = true
+			break
 		}
 	}
 	if !providerAuthorized {
-		return errtypes.NotFound("OCM Host")
+		return errtypes.BadRequest(
+			fmt.Sprintf(
+				"Invalid requesting OCM endpoint IP %s of provider %s",
+				pi.Services[0].Host, pi.GetDomain()))
 	}
 
 	return nil
@@ -231,11 +283,17 @@ func (a *authorizer) getOCMProviders(providers []*ocmprovider.ProviderInfo) (po 
 func (a *authorizer) getOCMHost(provider *ocmprovider.ProviderInfo) (string, error) {
 	for _, s := range provider.Services {
 		if s.Endpoint.Type.Name == "OCM" {
-			ocmHost, err := url.Parse(s.Host)
+			fmt.Printf("OCM service Host: %v\n", s.Host)
+			normalizedHost, err := normalizeDomain(s.Host)
 			if err != nil {
-				return "", errors.Wrap(err, "json: error parsing OCM host URL")
+				return "", errors.Wrap(err, fmt.Sprintf("mentix: error parsing OCM host URL %s", s.Host))
 			}
-			return ocmHost.Host, nil
+			return normalizedHost, nil
+			// ocmHost, err := url.Parse(s.Host)
+			// if err != nil {
+			// 	return "", errors.Wrap(err, fmt.Sprintf("mentix: error parsing OCM host URL %s", s.Host))
+			// }
+			// return ocmHost.Host, nil
 		}
 	}
 	return "", errtypes.NotFound("OCM Host")

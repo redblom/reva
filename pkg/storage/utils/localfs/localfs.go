@@ -31,6 +31,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cs3org/reva/pkg/appctx"
+
 	grouppb "github.com/cs3org/go-cs3apis/cs3/identity/group/v1beta1"
 	userpb "github.com/cs3org/go-cs3apis/cs3/identity/user/v1beta1"
 	provider "github.com/cs3org/go-cs3apis/cs3/storage/provider/v1beta1"
@@ -917,6 +919,8 @@ func (fs *localfs) moveReferences(ctx context.Context, oldName, newName string) 
 }
 
 func (fs *localfs) GetMD(ctx context.Context, ref *provider.Reference, mdKeys []string) (*provider.ResourceInfo, error) {
+	logger := appctx.GetLogger(ctx)
+	logger.Info().Msgf("GetMD - ref: %v, keys: %v", ref, mdKeys)
 	fn, err := fs.resolve(ctx, ref)
 	if err != nil {
 		return nil, errors.Wrap(err, "localfs: error resolving ref")

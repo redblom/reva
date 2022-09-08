@@ -25,6 +25,8 @@ import (
 	"path"
 	"strings"
 
+	"github.com/cs3org/reva/pkg/appctx"
+
 	ocmprovider "github.com/cs3org/go-cs3apis/cs3/ocm/provider/v1beta1"
 	provider "github.com/cs3org/go-cs3apis/cs3/storage/provider/v1beta1"
 	types "github.com/cs3org/go-cs3apis/cs3/types/v1beta1"
@@ -68,6 +70,8 @@ func (s *svc) webdavRefStat(ctx context.Context, targetURL string, nameQueries .
 }
 
 func (s *svc) webdavRefLs(ctx context.Context, targetURL string, nameQueries ...string) ([]*provider.ResourceInfo, error) {
+	logger := appctx.GetLogger(ctx)
+	logger.Info().Msgf("webdavRefLs - targetURL: %v, nameQueries: %v", targetURL, nameQueries)
 	targetURL, err := appendNameQuery(targetURL, nameQueries...)
 	if err != nil {
 		return nil, err
@@ -213,11 +217,14 @@ func (s *svc) webdavRefTransferEndpoint(ctx context.Context, targetURL string, n
 }
 
 func (s *svc) extractEndpointInfo(ctx context.Context, targetURL string) (*webdavEndpoint, error) {
+	logger := appctx.GetLogger(ctx)
+	logger.Info().Msgf("extractEndpointInfo() - targetURL: %v", targetURL)
 	if targetURL == "" {
 		return nil, errtypes.BadRequest("gateway: ref target is an empty uri")
 	}
 
 	uri, err := url.Parse(targetURL)
+	logger.Info().Msgf("parse targetURL = uri: %v", uri)
 	if err != nil {
 		return nil, errors.Wrap(err, "gateway: error parsing target uri: "+targetURL)
 	}
@@ -238,6 +245,7 @@ func (s *svc) extractEndpointInfo(ctx context.Context, targetURL string) (*webda
 }
 
 func (s *svc) getWebdavEndpoint(ctx context.Context, domain string) (string, error) {
+	fmt.Printf("getWebdavEndpoint - domain: %v\n", domain)
 	meshProvider, err := s.GetInfoByDomain(ctx, &ocmprovider.GetInfoByDomainRequest{
 		Domain: domain,
 	})
@@ -253,6 +261,7 @@ func (s *svc) getWebdavEndpoint(ctx context.Context, domain string) (string, err
 }
 
 func (s *svc) getWebdavHost(ctx context.Context, domain string) (string, error) {
+	fmt.Printf("getWebdavHost - domain: %v\n", domain)
 	meshProvider, err := s.GetInfoByDomain(ctx, &ocmprovider.GetInfoByDomainRequest{
 		Domain: domain,
 	})

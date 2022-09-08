@@ -787,6 +787,8 @@ func (s *service) Move(ctx context.Context, req *provider.MoveRequest) (*provide
 }
 
 func (s *service) Stat(ctx context.Context, req *provider.StatRequest) (*provider.StatResponse, error) {
+	logger := appctx.GetLogger(ctx)
+	logger.Debug().Msgf("service.storageprovider Stat - req: %v", req)
 	ctx, span := rtrace.Provider.Tracer("reva").Start(ctx, "stat")
 	defer span.End()
 
@@ -832,6 +834,8 @@ func (s *service) Stat(ctx context.Context, req *provider.StatRequest) (*provide
 }
 
 func (s *service) statVirtualView(ctx context.Context, ref *provider.Reference) (*provider.StatResponse, error) {
+	logger := appctx.GetLogger(ctx)
+	logger.Info().Msgf("statVIrtualView - ref: %v", ref)
 	// The reference in the request encompasses this provider
 	// So we need to stat root, and update the required path
 	md, err := s.storage.GetMD(ctx, &provider.Reference{Path: "/"}, []string{})

@@ -321,6 +321,7 @@ func (s *svc) UpdateReceivedShare(ctx context.Context, req *collaboration.Update
 	if res.Status.Code != rpc.Code_CODE_OK {
 		return res, nil
 	}
+	log.Debug().Msgf("received share updated - res: %v\n", res)
 
 	// if we don't need to create/delete references then we return early.
 	if !s.c.CommitShareToStorageRef ||
@@ -346,6 +347,7 @@ func (s *svc) UpdateReceivedShare(ctx context.Context, req *collaboration.Update
 		case "state":
 			switch req.GetShare().GetState() {
 			case collaboration.ShareState_SHARE_STATE_ACCEPTED:
+				log.Debug().Msgf("going to create reference - state: %v", req.GetShare().GetState())
 				rpcStatus := s.createReference(ctx, res.GetShare().GetShare().GetResourceId())
 				if rpcStatus.Code != rpc.Code_CODE_OK {
 					return &collaboration.UpdateReceivedShareResponse{Status: rpcStatus}, nil
@@ -445,6 +447,7 @@ func (s *svc) createReference(ctx context.Context, resourceID *provider.Resource
 		ResourceId: resourceID,
 	}
 	log := appctx.GetLogger(ctx)
+	log.Debug().Msgf("usershareprovider createReference() - ref: %v", ref)
 
 	// get the metadata about the share
 	c, err := s.find(ctx, ref)
@@ -469,6 +472,7 @@ func (s *svc) createReference(ctx context.Context, resourceID *provider.Resource
 		log.Err(err).Msg("gateway: Stat failed on the share resource id: " + resourceID.String())
 		return status.NewInternal(ctx, err, "error updating received share")
 	}
+	fmt.Println("stat successful")
 
 	homeRes, err := s.GetHome(ctx, &provider.GetHomeRequest{})
 	if err != nil {

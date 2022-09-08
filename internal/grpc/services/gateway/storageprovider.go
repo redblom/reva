@@ -1397,6 +1397,8 @@ func (s *svc) statSharesFolder(ctx context.Context) (*provider.StatResponse, err
 }
 
 func (s *svc) stat(ctx context.Context, req *provider.StatRequest) (*provider.StatResponse, error) {
+	logger := appctx.GetLogger(ctx)
+	logger.Debug().Msgf("storageprovider.stat() - req: %v", req)
 	providers, err := s.findProviders(ctx, req.Ref)
 	if err != nil {
 		return &provider.StatResponse{
@@ -1413,6 +1415,7 @@ func (s *svc) stat(ctx context.Context, req *provider.StatRequest) (*provider.St
 				Status: status.NewInternal(ctx, err, "error connecting to storage provider="+providers[0].Address),
 			}, nil
 		}
+		logger.Debug().Msgf("going to Stat - req: %v", req)
 		rsp, err := c.Stat(ctx, req)
 		if err != nil || rsp.Status.Code != rpc.Code_CODE_OK {
 			return rsp, err
@@ -1420,6 +1423,7 @@ func (s *svc) stat(ctx context.Context, req *provider.StatRequest) (*provider.St
 		return rsp, nil
 	}
 
+	logger.Debug().Msgf("going to stat accross providers: %v", req, providers)
 	return s.statAcrossProviders(ctx, req, providers)
 }
 
@@ -1473,7 +1477,10 @@ func (s *svc) statAcrossProviders(ctx context.Context, req *provider.StatRequest
 }
 
 func (s *svc) Stat(ctx context.Context, req *provider.StatRequest) (*provider.StatResponse, error) {
+	logger := appctx.GetLogger(ctx)
+	logger.Debug().Msgf("gateway.storageprovider Stat - req: %v", req)
 	if utils.IsRelativeReference(req.Ref) {
+		logger.Debug().Msgf("ref is relative reference: %v", req.Ref)
 		return s.stat(ctx, req)
 	}
 
@@ -1481,10 +1488,12 @@ func (s *svc) Stat(ctx context.Context, req *provider.StatRequest) (*provider.St
 	var res *provider.StatResponse
 	var err error
 	if utils.IsAbsolutePathReference(req.Ref) {
+		logger.Debug().Msgf("ref is absolute path reference: %v", req.Ref)
 		p = req.Ref.Path
 	} else {
 		// Reference by just resource ID
 		// Stat it and store for future use
+		logger.Debug().Msgf("stat by resource ID: %v", req)
 		res, err = s.stat(ctx, req)
 		if err != nil {
 			return &provider.StatResponse{
@@ -1498,14 +1507,17 @@ func (s *svc) Stat(ctx context.Context, req *provider.StatRequest) (*provider.St
 	}
 
 	if path.Clean(p) == s.getHome(ctx) {
+		logger.Debug().Msg("returning statHome")
 		return s.statHome(ctx)
 	}
 
 	if s.isSharedFolder(ctx, p) {
+		logger.Debug().Msg("returning statSharesFolder")
 		return s.statSharesFolder(ctx)
 	}
 
 	if !s.inSharedFolder(ctx, p) {
+		logger.Debug().Msgf("not in shared folder path: %v", p)
 		if res != nil {
 			return res, nil
 		}
@@ -1893,6 +1905,7 @@ func (s *svc) listContainerAcrossProviders(ctx context.Context, req *provider.Li
 
 func (s *svc) ListContainer(ctx context.Context, req *provider.ListContainerRequest) (*provider.ListContainerResponse, error) {
 	log := appctx.GetLogger(ctx)
+	log.Info().Msgf("ListContainer req: %v", req)
 
 	if utils.IsRelativeReference(req.Ref) {
 		return s.listContainer(ctx, req)
@@ -1906,14 +1919,17 @@ func (s *svc) ListContainer(ctx context.Context, req *provider.ListContainerRequ
 	}
 
 	if path.Clean(p) == s.getHome(ctx) {
+		log.Info().Msgf("ListContainer home: %v", p)
 		return s.listHome(ctx, req)
 	}
 
 	if s.isSharedFolder(ctx, p) {
+		log.Info().Msgf("ListContainer shared folder: %v", p)
 		return s.listSharesFolder(ctx)
 	}
 
 	if !s.inSharedFolder(ctx, p) {
+		log.Info().Msgf("ListContainer: %v", p)
 		return s.listContainer(ctx, req)
 	}
 

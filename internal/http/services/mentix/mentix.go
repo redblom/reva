@@ -19,6 +19,7 @@
 package mentix
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/cs3org/reva/pkg/mentix/meshdata"
@@ -189,6 +190,7 @@ func New(m map[string]interface{}, log *zerolog.Logger) (global.Service, error) 
 		log:        log,
 		stopSignal: make(chan struct{}),
 	}
+	fmt.Printf("Starting mentic background service - %v", conf.Connectors.GOCDB.Address)
 	s.startBackgroundService()
 	return s, nil
 }

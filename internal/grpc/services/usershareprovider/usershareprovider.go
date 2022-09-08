@@ -20,6 +20,7 @@ package usershareprovider
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 
 	userpb "github.com/cs3org/go-cs3apis/cs3/identity/user/v1beta1"
@@ -247,6 +248,7 @@ func (s *service) ListReceivedShares(ctx context.Context, req *collaboration.Lis
 func (s *service) GetReceivedShare(ctx context.Context, req *collaboration.GetReceivedShareRequest) (*collaboration.GetReceivedShareResponse, error) {
 	log := appctx.GetLogger(ctx)
 
+	fmt.Printf("usershareprovider: retrieving share\n")
 	share, err := s.sm.GetReceivedShare(ctx, req.Ref)
 	if err != nil {
 		log.Err(err).Msg("error getting received share")
