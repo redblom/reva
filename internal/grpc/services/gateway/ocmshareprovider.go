@@ -498,7 +498,6 @@ func (s *svc) createOCMReference(ctx context.Context, share *ocm.Share) (*rpc.St
 		// It is the responsibility of the gateway to resolve these references and merge the response back
 		// from the main request.
 		refPath = path.Join(homeRes.Path, s.c.ShareFolder, path.Base(share.Name))
-		// webdav is the scheme, token@host the opaque part and the share name the query of the URL.
 		creatorIdpUrl, err := url.Parse(share.Creator.Idp)
 		if err != nil {
 			err := errors.Wrap(err, "gateway: error creating OCM reference")
@@ -508,6 +507,7 @@ func (s *svc) createOCMReference(ctx context.Context, share *ocm.Share) (*rpc.St
 			err := errors.Wrap(err, "gateway: error creating OCM reference")
 			return status.NewInternal(ctx, err, "error parsing share creator IDP. IDP is not absolute, it lacks a scheme."), nil
 		}
+		// webdav is the scheme, token@host the opaque part and the share name the query of the URL.
 		targetURI = fmt.Sprintf("webdav://%s@%s?name=%s", token, strings.TrimLeft(creatorIdpUrl.String(), creatorIdpUrl.Scheme+"://"), share.Name)
 	}
 
