@@ -350,7 +350,13 @@ func (s *svc) handleTransfer(ctx context.Context, share *ocm.ReceivedShare, tran
 	if !ok {
 		return errors.New("gateway: unable to retrieve transfer protocol")
 	}
-	sourceURI := protocol.SourceUri
+	sourceUrlFromProtocol, err := url.Parse(protocol.SourceUri)
+	if err != nil {
+		log.Err(err).Msg("gateway: error calling UpdateReceivedShare: unable to parse source URI \"" + protocol.SourceUri + "\" into URL structure")
+		return err
+	}
+	// re-create src URI but now with the shared secret as user because that's how datatx likes it
+	sourceURI := fmt.Sprintf("%s://%s@%s/%s", sourceUrlFromProtocol.Scheme, protocol.SharedSecret, sourceUrlFromProtocol.Host, strings.TrimLeft(sourceUrlFromProtocol.Path, "/"))
 
 	// get the webdav endpoint of the grantee's idp
 	var granteeIdp string
